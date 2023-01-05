@@ -333,7 +333,7 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	
+
 	// 기존 코드
 	// list_push_back (&cond->waiters, &waiter.elem);
 	/* ------------------------------ project1-2-2_Priority Scheduling and Synchronization ------------------------------ */
@@ -386,7 +386,7 @@ cond_broadcast (struct condition *cond, struct lock *lock) {
 
 /* ------------------------------ project1-2-2_Priority Scheduling and Synchronization ------------------------------ */
 // 첫번째 인자의 우선순위가 두번째 인자의 우선순위보다 높으면 1을 반환, 낮으면 0을 반환
-// 해당 condition vatiable을 가지는 세마포어 리스트를 가장 높은 우선 순위를 가지는 스레드의 수선순위 순으로 정렬하도록 구현
+// 해당 condition variable을 가지는 세마포어 리스트를 가장 높은 우선 순위를 가지는 스레드의 수선순위 순으로 정렬하도록 구현
 // 주의! struct semaphore_elem 밑에 선언을 해야함
 bool
 cmp_sem_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED){

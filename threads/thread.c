@@ -11,9 +11,9 @@
 #include "threads/synch.h"
 #include "threads/vaddr.h"
 #include "intrinsic.h"
+#include "userprog/syscall.h"
 #ifdef USERPROG
 #include "userprog/process.h"
-#include "userprog/syscall.h"
 #endif
 
 /* Random value for struct thread's `magic' member.
@@ -222,7 +222,7 @@ thread_create (const char *name, int priority,
 	t->file_descriptor_talbe = palloc_get_multiple(PAL_ZERO, 3);
 	// 0번째 인덱스 : STDIN
 	t->file_descriptor_talbe[0] = STDIN;
-	// 0번째 인덱스 : STDOUT
+	// 1번째 인덱스 : STDOUT
 	t->file_descriptor_talbe[1] = STDOUT;
 	// STDIN과 STDOUT을 사용하기 때문에 두번째 인덱스로 초기화
 	t->file_descriptor_index = 2;
@@ -340,10 +340,10 @@ thread_exit (void) {
 	NOT_REACHED ();
 }
 
+/* 실행중인 스레드 레디큐로, 레디큐의 다음스레드 실행시키기 */
 /* Yields the CPU.  The current thread is not put to sleep and
    may be scheduled again immediately at the scheduler's whim. */
-void
-thread_yield (void) {
+void thread_yield (void) {
 	struct thread *curr = thread_current ();
 	enum intr_level old_level;
 
@@ -618,6 +618,8 @@ static void
 do_schedule(int status) {
 	ASSERT (intr_get_level () == INTR_OFF);
 	ASSERT (thread_current()->status == THREAD_RUNNING);
+
+	/* 스레드 제거리스트가 빌때까지 할당 해제처리 해준다 */
 	while (!list_empty (&destruction_req)) {
 		struct thread *victim =
 			list_entry (list_pop_front (&destruction_req), struct thread, elem);
@@ -627,8 +629,8 @@ do_schedule(int status) {
 	schedule ();
 }
 
-static void
-schedule (void) {
+/* ready_list의 다음 스레드 실행시켜주는 함수 */
+static void schedule (void) {
 	struct thread *curr = running_thread ();
 	struct thread *next = next_thread_to_run ();
 
@@ -639,7 +641,7 @@ schedule (void) {
 	next->status = THREAD_RUNNING;
 
 	/* Start new time slice. */
-	thread_ticks = 0;
+	thread_ticks = 0;	// schedule을 통해 레디큐 다음 순번의 스레드가 실행되면, 정해진 time slice마다 인터럽트 시키려고 0 으로 초기화
 
 #ifdef USERPROG
 	/* Activate the new address space. */
@@ -681,43 +683,38 @@ allocate_tid (void) {
 /* ----------------------------------- project1-1_Alarm Clock ----------------------------------- */
 // 스레드를 blocked 상태로 만들고 sleep queue에 삽입하여 대기
 // devices/timer.c => timer_sleep() 함수에 의해 호출
-void
-thread_sleep (int64_t ticks) {	
-	struct thread *curr = thread_current ();
+void thread_sleep(int64_t ticks)
+{
 	enum intr_level old_level;
-
-	ASSERT (!intr_context ());
+	struct thread *curr = thread_current ();
+	
 	old_level = intr_disable ();
 
-	// thread가 깨어나야할 ticks 저장
-	curr->wakeup_tick = ticks;
+	curr -> wakeup_tick = ticks;	/* 이때까지 재워라 */
+	if (curr != idle_thread){
+		list_push_back(&sleep_list, &curr->elem);
+		update_next_tick_to_awake(ticks);
+		thread_block(); 
+	}
 
-	if (curr != idle_thread)
-		list_push_back (&sleep_list, &curr->elem);
-
-	update_next_tick_to_awake(ticks);
-	// blocked(sleep) 상태로 삽입하므로 THREAD_BLOCKED로 변경
-	do_schedule (THREAD_BLOCKED);
 	intr_set_level (old_level);
 }
 
 // next_tick_to_awake 업데이트 함수
-void
-update_next_tick_to_awake(int64_t ticks) {
+void update_next_tick_to_awake(int64_t ticks) {
 	// next_tick_to_awake가 깨워야할 스레드중 가장 작은 tick을 갖도록 업데이트함
 	next_tick_to_awake = MIN(next_tick_to_awake, ticks);
 }
 
 // next_tick_to_awake를 반환하는 함수
-int64_t
-get_next_tick_to_awake(void) {
+int64_t get_next_tick_to_awake(void) {
 	return next_tick_to_awake;
 }
 
 // wakeup_tick 값이 tick보다 작거나 같은 스레드를 깨움
 // 현재 대기중인 스레드들의 wakepup_tick 변수중 가장 작은 값을 next_tick_to_awake로 갱신
 void thread_awake(int64_t ticks) {
-	next_tick_to_awake = INT64_MAX;
+	// next_tick_to_awake = INT64_MAX;	// 아래 주석처리와 같은 이유
 	struct list_elem *le = list_begin(&sleep_list);
 	struct thread *th;
 
@@ -725,11 +722,11 @@ void thread_awake(int64_t ticks) {
 		th = list_entry(le, struct thread, elem);
 
 		if(ticks >= th->wakeup_tick){
-			le = list_remove(&th->elem);
-			thread_unblock(th);
+			le = list_remove(&th->elem); // 제거하면 현재 자리에 다음 녀석 밀려오니 증감식 적용 x
+			thread_unblock(th);	// 깨워주는 녀석은 시스템이 1초에 한번씩 인터럽트 받아 하는 것일테니 test_max_priority로 밀어내려하면 안된다.
 		}
 		else{
-			update_next_tick_to_awake(th->wakeup_tick);
+			// update_next_tick_to_awake(th->wakeup_tick); // XXX: 이미 next_tick_to_awake가 최소인걸 타고 들어온거라 update 안될거같음
 			le = list_next(le);
 		}
 	}
@@ -746,10 +743,8 @@ cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNU
 	return (p_a->priority > p_b->priority ? true : false);
 }
 
-// ready_list에서 우선순위가 가장 높은 스레드와 현재 스레드의 우선순위를 비교하여 스케줄링 함
-// ready_list가 비어있지 않은지 확인
-void
-test_max_priority(void){
+/* 레디큐 처음 스레드를 현재 스레드 비교해서 더 크면 yield 시키기 */
+void test_max_priority(void){
 	if(list_empty(&ready_list))
 		return;
 	else {
@@ -806,8 +801,7 @@ remove_with_lock(struct lock *lock){
 // 현재 스레드의 우선순위를 기부받기 전의 우선순위로 변경
 // 가장 우선순위가 높은 donation list의 스레드와 현재 스레드의 우선 순위를 비교하여
 //		높은 값을 현재 스레드의 우선순위로 설정
-void
-refresh_priority(void){
+void refresh_priority(void){
 	struct thread *th = thread_current();
 	th->priority = th->init_priority;
 

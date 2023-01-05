@@ -93,10 +93,9 @@ timer_sleep (int64_t ticks) {
 	int64_t start = timer_ticks ();
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
-
-	
+	// if (timer_elapsed (start) < ticks){
+	thread_sleep(start + ticks);	// 스레드 계속 몰아넣지말고 재우기
+	// }
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -127,7 +126,7 @@ timer_print_stats (void) {
 static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
-	thread_tick ();
+	thread_tick ();	// timer interrupt가 1틱마다 일어나기에 실행중인 스레드의 틱들도 여기서 증가시켜주며 관리
 
 	/* -------------- project1-1_Alarm Clock ------------- */
 	// 매 tick마다 sleep queue에서 깨어날 thread가 있는지 확인하며,
