@@ -12,17 +12,19 @@
  * See pte.h for functions and macros specifically for x86
  * hardware page tables. */
 
-#define BITMASK(SHIFT, CNT) (((1ul << (CNT)) - 1) << (SHIFT))
+#define BITMASK(SHIFT, CNT) (((1ul << (CNT)) - 1) << (SHIFT))	/* ul: unsigned long */
 
 /* Page offset (bits 0:12). */
 #define PGSHIFT 0                          /* Index of first offset bit. */
 #define PGBITS  12                         /* Number of offset bits. */
 #define PGSIZE  (1 << PGBITS)              /* Bytes in a page. */
-#define PGMASK  BITMASK(PGSHIFT, PGBITS)   /* Page offset bits (0:12). */
+#define PGMASK  BITMASK(PGSHIFT, PGBITS)   /* Page offset bits (0:12). (1111 1111 1111)  */
 
 /* Offset within a page. */
+// 주소중 하위 12비트만 리턴
 #define pg_ofs(va) ((uint64_t) (va) & PGMASK)
 
+// 주소중 하위 12비트 제거하고 리턴
 #define pg_no(va) ((uint64_t) (va) >> PGBITS)
 
 /* Round up to nearest page boundary. */
@@ -32,6 +34,7 @@
 #define pg_round_down(va) (void *) ((uint64_t) (va) & ~PGMASK)
 
 /* Kernel virtual address start */
+// 0~ KERN_BASE: user & KERN_BASE ~ : kernel
 #define KERN_BASE LOADER_KERN_BASE
 
 /* User stack start */
