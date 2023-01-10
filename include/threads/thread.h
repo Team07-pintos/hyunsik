@@ -114,11 +114,6 @@ struct thread {
 	/* Table for whole virtual memory owned by thread. */
 	struct supplemental_page_table spt;
 #endif
-
-	/* Owned by thread.c. */
-	struct intr_frame tf;               /* Information for switching */
-	unsigned magic;                     /* Detects stack overflow. */
-
 	/* -------------- project1 ------------- */
 	/* tick till wake up */
 	/* 깨어나야할 tick 저장 */
@@ -164,6 +159,10 @@ struct thread {
 	struct semaphore wait_sys_sema;
 	struct semaphore exit_sys_sema;
 	/* -------------- project2-3-2_System calls-Process ------------- */
+	
+		/* Owned by thread.c. */
+	struct intr_frame tf;               /* Information for switching */
+	unsigned magic;                     /* Detects stack overflow. */
 };
 
 /* If false (default), use round-robin scheduler.
