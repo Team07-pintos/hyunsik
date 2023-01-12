@@ -40,9 +40,10 @@ static struct frame *vm_evict_frame (void);
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
+/* 커널이 새로운 페이지 요청받으면 호출 */
 bool vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable, vm_initializer *init, void *aux) {
 
-	ASSERT (VM_TYPE(type) != VM_UNINIT)
+	ASSERT (VM_TYPE(type) != VM_UNINIT);
 
 	struct supplemental_page_table *spt = &thread_current ()->spt;
 
@@ -53,18 +54,26 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writab
 		 * TODO: should modify the field after calling the uninit_new. */
 		struct page *page = (struct page*)malloc(sizeof(struct page));
 		bool (*initializer)(struct page *, enum vm_type, void *kva);
+
 		switch(VM_TYPE(type))
 		{
 			case VM_ANON: 
 				initializer = anon_initializer;
+				uninit_new(page, upage, init, type, aux, initializer);
+				break;
 			case VM_FILE:
 				initializer = file_backed_initializer;
+				uninit_new(page, upage, init, type, aux, initializer);
+				break;
 		}
-		uninit_new(page, upage, init, type, aux, initializer);
+		page->writable = writable;
+		
 		/* TODO: Insert the page into the spt. */
+		if(!spt_insert_page(spt, page)){
+			return false;
+		}
+		return true;
 	}
-err:
-	return false;
 }
 
 /* Find VA from spt and return page. On error, return NULL. */
@@ -73,10 +82,10 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 
 	/* TODO: Fill this function. */
-	struct page tmp_page;
-	tmp_page.va = pg_round_down(va);
-	struct hash_elem *tmp_elem = hash_find(&spt->sup_hash, &tmp_page.hash_e);
-
+	page = (struct page*)malloc(sizeof(struct page));
+	page->va = pg_round_down(va);
+	struct hash_elem *tmp_elem = hash_find(&spt->sup_hash, &page->hash_e);
+	free(page);
 	return tmp_elem != NULL ? hash_entry(tmp_elem, struct page, hash_e) : NULL;
 }
 
@@ -123,7 +132,7 @@ static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
-	frame = (struct frame *)malloc(sizeof(struct frame));
+	frame = (struct frame *)malloc(sizeof(struct frame));	// TODO: 할당해제
 	frame->kva = palloc_get_page(PAL_USER);
 
 	if(frame->kva == NULL){
@@ -148,13 +157,20 @@ vm_handle_wp (struct page *page UNUSED) {
 }
 
 /* Return true on success */
+/* page fault 에서 호출 */
 bool
-vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED,
-		bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
+vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED, bool user UNUSED, bool write UNUSED, bool not_present UNUSED) {
 	struct supplemental_page_table *spt UNUSED = &thread_current ()->spt;
 	struct page *page = NULL;
 	/* TODO: Validate the fault */
 	/* TODO: Your code goes here */
+	// 인자로 넘겨받은 에러들로 에러별 핸들러를 구현
+	if(is_kernel_vaddr(addr)){
+		return false;
+	}
+
+
+
 
 	return vm_do_claim_page (page);
 }
@@ -168,6 +184,8 @@ vm_dealloc_page (struct page *page) {
 }
 
 /* Claim the page that allocate on VA. */
+/* va로 spt 에서 page 찾고, do_claim으로 frame 할당받고
+	pml4에 연결 */
 bool
 vm_claim_page (void *va UNUSED) {
 	struct page *page = NULL;
@@ -182,6 +200,7 @@ vm_claim_page (void *va UNUSED) {
 }
 
 /* Claim the PAGE and set up the mmu. */
+/* spt에 있는 page 받고, frame 할당시켜서 pml4에 연결 */
 static bool
 vm_do_claim_page (struct page *page) {
 	struct frame *frame = vm_get_frame ();
@@ -192,7 +211,7 @@ vm_do_claim_page (struct page *page) {
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct thread *t = thread_current();
-	if(pml4_set_page(t->pml4, page->va, frame->kva, page->writable)){
+	if(pml4_set_page(t->pml4, page->va, frame->kva, page->writable)){	// 에러처리
 		return swap_in (page, frame->kva);
 	}
 	else{
@@ -204,7 +223,7 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	// spt->sup_hash = palloc_get_page(PAL_USER || PAL_ZERO);	// XXX: 더해야하는거 아닌가
+	// spt->sup_hash = palloc_get_page(PAL_USER | PAL_ZERO);
 	hash_init(&spt->sup_hash, page_hash, page_less, NULL);
 }
 

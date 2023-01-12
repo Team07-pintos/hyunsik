@@ -20,7 +20,7 @@ enum vm_type {
 
 	/* Auxillary bit flag marker for store information. You can add more
 	 * markers, until the value is fit in the int. */
-	VM_MARKER_0 = (1 << 3),
+	VM_MARKER_0 = (1 << 3),	// stack 용도로 사용
 	VM_MARKER_1 = (1 << 4),
 
 	/* DO NOT EXCEED THIS VALUE. */
@@ -51,6 +51,7 @@ struct page {
 	/* Your implementation */
 	struct hash_elem hash_e;
 	bool writable;
+	bool is_stack;
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -118,5 +119,12 @@ enum vm_type page_get_type (struct page *page);
 /* 3-1 implementation */
 uint64_t page_hash (const struct hash_elem *p_, void *aux UNUSED);
 bool page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
+
+struct lazy_load_aux{
+	struct file *file;
+	off_t ofs;
+	uint32_t read_bytes;
+	uint32_t zero_bytes;
+};
 
 #endif  /* VM_VM_H */

@@ -1,3 +1,5 @@
+// #define VM
+
 #include "userprog/process.h"
 #include <debug.h>
 #include <inttypes.h>
@@ -890,6 +892,28 @@ lazy_load_segment (struct page *page, void *aux) {
 	/* TODO: Load the segment from the file */
 	/* TODO: This called when the first page fault occurs on address VA. */
 	/* TODO: VA is available when calling this function. */
+
+	struct lazy_load_aux * aux_data = (struct lazy_load_aux *)aux;
+
+	struct file *file = aux_data->file;
+	off_t ofs = aux_data->ofs;
+	uint32_t read_bytes = aux_data->read_bytes;
+	uint32_t zero_bytes = aux_data->zero_bytes;
+
+	free(aux);
+	file_seek(file, ofs);
+	if(!vm_claim_page(page->va)){	// uninit_new뒤 page 멤버의 frame은 null
+		return false;
+	}
+
+	/* Load this page. */
+	if (file_read (file, page->frame->kva, read_bytes) != (int) read_bytes) {
+		palloc_free_page (page->frame->kva);
+		return false;
+	}
+	memset (page->frame->kva + read_bytes, 0, zero_bytes);
+
+	return true;
 }
 
 /* Loads a segment starting at offset OFS in FILE at address
@@ -921,15 +945,23 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
 		size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
 		/* TODO: Set up aux to pass information to the lazy_load_segment. */
-		void *aux = NULL;
-		if (!vm_alloc_page_with_initializer (VM_ANON, upage,
-					writable, lazy_load_segment, aux))
+		// void *aux = NULL;
+		struct lazy_load_aux *aux = (struct lazy_load_aux *)malloc(sizeof(struct lazy_load_aux));
+		aux->file = file;
+		aux->ofs = ofs;
+		aux->read_bytes = read_bytes;
+		aux->zero_bytes = zero_bytes;
+
+		if (!vm_alloc_page_with_initializer (VM_ANON, upage, writable, lazy_load_segment, (void *)aux)){
+			free(aux);
 			return false;
+		}
 
 		/* Advance. */
 		read_bytes -= page_read_bytes;
 		zero_bytes -= page_zero_bytes;
 		upage += PGSIZE;
+		ofs += PGSIZE;
 	}
 	return true;
 }
@@ -944,6 +976,14 @@ setup_stack (struct intr_frame *if_) {
 	 * TODO: If success, set the rsp accordingly.
 	 * TODO: You should mark the page is stack. */
 	/* TODO: Your code goes here */
+	if(vm_claim_page(stack_bottom)){
+		if_->rsp = USER_STACK;
+		success = true;
+	}
+	struct page *tmp = spt_find_page(&thread_current()->spt, stack_bottom);
+	tmp->is_stack = true;
+	struct page_operations *tmp_o =  tmp->operations;
+	tmp_o->type = VM_MARKER_0;
 
 	return success;
 }
