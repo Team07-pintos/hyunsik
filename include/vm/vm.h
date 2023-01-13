@@ -16,11 +16,14 @@ enum vm_type {
 	/* page that hold the page cache, for project 4 */
 	VM_PAGE_CACHE = 3,
 
+	VM_STACK = 9, // VM_TYPE() 으로 7과 & 연산하므로 2의 0, 1, 2 승 자리에 하나는 들어가야함
+									// 그냥 type만 비교시 9, 함수활용시 1 로 anon 과 같은 효과 낼 수 있음
+
 	/* Bit flags to store state */
 
 	/* Auxillary bit flag marker for store information. You can add more
 	 * markers, until the value is fit in the int. */
-	VM_MARKER_0 = (1 << 3),	// stack 용도로 사용
+	VM_MARKER_0 = (1 << 3),
 	VM_MARKER_1 = (1 << 4),
 
 	/* DO NOT EXCEED THIS VALUE. */
@@ -91,7 +94,7 @@ struct page_operations {
  * We don't want to force you to obey any specific design for this struct.
  * All designs up to you for this. */
 struct supplemental_page_table {
-	struct hash *sup_hash;
+	struct hash sup_hash;
 };
 
 #include "threads/thread.h"
@@ -123,8 +126,12 @@ bool page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *au
 struct lazy_load_aux{
 	struct file *file;
 	off_t ofs;
-	uint32_t read_bytes;
-	uint32_t zero_bytes;
+
+	// 파일로부터 읽을 바이트 수
+	size_t page_read_bytes;
+
+	// 파일에 쓸 바이트 수????????????
+	size_t page_zero_bytes;
 };
 
 #endif  /* VM_VM_H */

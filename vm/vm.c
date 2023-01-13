@@ -40,7 +40,9 @@ static struct frame *vm_evict_frame (void);
 /* Create the pending page object with initializer. If you want to create a
  * page, do not create it directly and make it through this function or
  * `vm_alloc_page`. */
-/* 커널이 새로운 페이지 요청받으면 호출 */
+/* 커널이 새로운 페이지 요청받으면 호출
+	각 타입에 맞게 uninit_new로 aux와 함께 page 저장
+	spt에 추가 */
 bool vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writable, vm_initializer *init, void *aux) {
 
 	ASSERT (VM_TYPE(type) != VM_UNINIT);
@@ -52,7 +54,7 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writab
 		/* TODO: Create the page, fetch the initialier according to the VM type,
 		 * TODO: and then create "uninit" page struct by calling uninit_new. You
 		 * TODO: should modify the field after calling the uninit_new. */
-		struct page *page = (struct page*)malloc(sizeof(struct page));
+		struct page *page = (struct page*)calloc(1, sizeof(struct page));
 		bool (*initializer)(struct page *, enum vm_type, void *kva);
 
 		switch(VM_TYPE(type))
@@ -67,6 +69,9 @@ bool vm_alloc_page_with_initializer (enum vm_type type, void *upage, bool writab
 				break;
 		}
 		page->writable = writable;
+		// 스택인 경우 구분
+		if (type == VM_STACK)	// anon과 비교되야 하므로 VM_TYPE() 없이
+			page->is_stack = true;
 		
 		/* TODO: Insert the page into the spt. */
 		if(!spt_insert_page(spt, page)){
@@ -82,10 +87,11 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 	struct page *page = NULL;
 
 	/* TODO: Fill this function. */
-	page = (struct page*)malloc(sizeof(struct page));
+	page = (struct page*)calloc(1, sizeof(struct page));
 	page->va = pg_round_down(va);
 	struct hash_elem *tmp_elem = hash_find(&spt->sup_hash, &page->hash_e);
 	free(page);
+
 	return tmp_elem != NULL ? hash_entry(tmp_elem, struct page, hash_e) : NULL;
 }
 
@@ -93,7 +99,16 @@ spt_find_page (struct supplemental_page_table *spt UNUSED, void *va UNUSED) {
 bool spt_insert_page (struct supplemental_page_table *spt UNUSED, struct page *page UNUSED) {
 	int succ = false;
 	/* TODO: Fill this function. */
-	if(hash_insert(spt->sup_hash, &page->hash_e) != NULL){
+
+	struct hash_elem *check_page_elem = hash_find(&spt->sup_hash, &page->hash_e);
+
+	// 에러 체크 - check_page_elem이 NULL인 경우
+	if(check_page_elem != NULL)
+		// false 반환
+		return succ;
+	// check_page_elem가 비어있지 않은 경우
+	else{
+		hash_insert(&spt->sup_hash, &page->hash_e);
 		succ = true;
 	}
 	return succ;
@@ -132,18 +147,18 @@ static struct frame *
 vm_get_frame (void) {
 	struct frame *frame = NULL;
 	/* TODO: Fill this function. */
-	frame = (struct frame *)malloc(sizeof(struct frame));	// TODO: 할당해제
+	frame = (struct frame *)calloc(1, sizeof(struct frame));	// TODO: 할당해제
+	ASSERT (frame != NULL);
+	ASSERT (frame->page == NULL);
 	frame->kva = palloc_get_page(PAL_USER);
+	frame->page == NULL;
 
 	if(frame->kva == NULL){
 		PANIC("todo");	// swap in 해줘야함 나중에
 	}
-
-	frame->page == NULL;
-
-	ASSERT (frame != NULL);
-	ASSERT (frame->page == NULL);
-	return frame;
+	else{
+		return frame;
+	}
 }
 
 /* Growing the stack. */
@@ -168,11 +183,23 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED, bool user U
 	if(is_kernel_vaddr(addr)){
 		return false;
 	}
+	// 현재 페이지가 없는 경우
+	if (not_present) {
+		// 보조 페이지 테이블에서 주소에 맞는 페이지 가져오기
+        page = spt_find_page(spt, addr);
 
+		// 가져온 페이지가 NULL인 경우
+        if (page == NULL)
+			// false 리턴
+            return false;
 
+		// 페이지에 프레임을 할당하고 mmu 설정
+        if (vm_do_claim_page (page) == false)
+			// 실패한 경우 false 리턴
+            return false;
+    }
 
-
-	return vm_do_claim_page (page);
+	return true;
 }
 
 /* Free the page.
@@ -211,7 +238,12 @@ vm_do_claim_page (struct page *page) {
 
 	/* TODO: Insert page table entry to map page's VA to frame's PA. */
 	struct thread *t = thread_current();
-	if(pml4_set_page(t->pml4, page->va, frame->kva, page->writable)){	// 에러처리
+	if(pml4_get_page(t->pml4, page->va) == NULL && pml4_set_page(t->pml4, page->va, frame->kva, page->writable)){
+		// stack의 경우 swap_in 과정이 진행되지 않아도 됨
+		if(page->is_stack == true)
+			return true;
+
+		// 페이지 구조체 안의 page_operations 구조체를 통해 swap_int 함수 테이블에 값 넣기
 		return swap_in (page, frame->kva);
 	}
 	else{
@@ -238,7 +270,7 @@ void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	palloc_free_page(spt->sup_hash);
+	// palloc_free_page(spt->sup_hash);
 }
 
 /* 3-1 implementation */
