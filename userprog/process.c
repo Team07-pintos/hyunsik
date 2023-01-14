@@ -908,7 +908,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	}
 	else{
 		memset (page->frame->kva + page_read_bytes, 0, page_zero_bytes);
-		free(aux_data);
+		free(aux_data);	//destroy에서 해제
 
 		return true;
 	}

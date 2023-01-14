@@ -5,6 +5,7 @@
 #include "lib/kernel/hash.h"
 #include "threads/vaddr.h"
 #include "threads/mmu.h"
+#include "lib/string.h"
 
 enum vm_type {
 	/* page not initialized */

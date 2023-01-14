@@ -255,22 +255,55 @@ vm_do_claim_page (struct page *page) {
 /* Initialize new supplemental page table */
 void
 supplemental_page_table_init (struct supplemental_page_table *spt UNUSED) {
-	// spt->sup_hash = palloc_get_page(PAL_USER | PAL_ZERO);
 	hash_init(&spt->sup_hash, page_hash, page_less, NULL);
 }
 
 /* Copy supplemental page table from src to dst */
+/* src의 spt를 dst의 spt 로 복사 */
 bool
-supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED,
-		struct supplemental_page_table *src UNUSED) {
-}
+supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED, struct supplemental_page_table *src UNUSED) {
+
+	struct thread *child_t = thread_current();
+
+	struct hash_iterator i;
+	hash_first (&i, &src->sup_hash);
+	while (hash_next (&i)) {
+		struct page *parent = hash_entry (hash_cur (&i), struct page, hash_e);
+		void *upage = parent->va;
+
+		switch(VM_TYPE(parent->operations->type)){
+			case VM_UNINIT:	// anon으로 세팅된 뒤 아직 lazy_load되기 전 상태 (aux 필요)
+				if(parent->uninit.type == VM_ANON){
+					struct lazy_load_aux *p_aux = parent->uninit.aux;
+					struct lazy_load_aux *c_aux = (struct lazy_load_aux *)calloc(1, sizeof(struct lazy_load_aux));
+					c_aux->file = file_duplicate(p_aux->file);
+					c_aux->ofs = p_aux->ofs;
+					c_aux->page_read_bytes = p_aux->page_read_bytes;
+					c_aux->page_zero_bytes = p_aux->page_zero_bytes;
+
+					vm_alloc_page_with_initializer(VM_ANON, upage, parent->writable, parent->uninit.init, c_aux);
+					
+					break;
+				}
+			default:	// lazy_load 된 뒤 상태(frame과의 연결과 frame 세팅 필요)
+					vm_alloc_page_with_initializer(VM_ANON, upage, parent->writable, NULL, NULL);
+				if(vm_claim_page(upage)){
+					struct page *child = spt_find_page(dst, upage);
+					memcpy(child->frame->kva, parent->frame->kva, PGSIZE);
+				}
+				break;
+		}
+		// if(hash_insert(&dst->sup_hash, hash_cur (&i)) == NULL){
+		// 	return false;
+		}
+	return true;
+	}
 
 /* Free the resource hold by the supplemental page table */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	// palloc_free_page(spt->sup_hash);
 }
 
 /* 3-1 implementation */
