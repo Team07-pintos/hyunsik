@@ -300,10 +300,19 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED, struct
 	}
 
 /* Free the resource hold by the supplemental page table */
+/* page 순회하면서 destroy 호출 */
 void
 supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
+	/* error */
+	struct hash_iterator i;
+	hash_first (&i, &spt->sup_hash);
+	while (hash_next (&i)) {
+		struct page *tmp = hash_entry (hash_cur (&i), struct page, hash_e);
+		spt_remove_page(spt, tmp);	// page 구조체 할당해제 및 destroy 함수 호출	
+	}
+	free(spt->sup_hash.buckets);	// hash_init에서 할당
 }
 
 /* 3-1 implementation */

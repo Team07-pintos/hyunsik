@@ -77,8 +77,15 @@ syscall_init (void) {
 // 포인터가 가리키는 주소가 사용자 영역인지 확인
 // 사용자 영역을 벗어난 경우 프로세스 종료
 void check_address(void *addr){
-	if(!is_user_vaddr(addr) || addr == NULL || pml4_get_page(thread_current()->pml4, addr) == NULL){
+	if(!is_user_vaddr(addr) || addr == NULL){
 		exit(-1);
+	}
+
+	// lazy_load 구현 이후, addr에 대응되는 frame이 할당 되지 않아도 통과 시켜 줘야함
+	if(pml4_get_page(thread_current()->pml4, addr) == NULL){
+		if(spt_find_page(&(thread_current()->spt.sup_hash), addr) == NULL){
+			exit(-1);
+		}
 	}
 }
 /* ----------------------------------- project2-2_User Memory Access ----------------------------------- */

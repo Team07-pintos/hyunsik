@@ -131,7 +131,7 @@ struct lazy_load_aux{
 	// 파일로부터 읽을 바이트 수
 	size_t page_read_bytes;
 
-	// 파일에 쓸 바이트 수????????????
+	// pgsize에서 남는부분 0처리
 	size_t page_zero_bytes;
 };
 

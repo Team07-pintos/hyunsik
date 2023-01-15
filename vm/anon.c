@@ -49,4 +49,9 @@ anon_swap_out (struct page *page) {
 static void
 anon_destroy (struct page *page) {
 	struct anon_page *anon_page = &page->anon;
+
+	// lazy_load가 완료된 경우 여기로 오므로 frame 확인 후 구조체 할당 해제
+	if(page->frame != NULL){
+		free(page->frame);
+	}
 }

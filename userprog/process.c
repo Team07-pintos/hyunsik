@@ -1,4 +1,4 @@
-#define VM
+// #define VM
 
 #include "userprog/process.h"
 #include <debug.h>
@@ -908,7 +908,7 @@ lazy_load_segment (struct page *page, void *aux) {
 	}
 	else{
 		memset (page->frame->kva + page_read_bytes, 0, page_zero_bytes);
-		free(aux_data);	//destroy에서 해제
+		free(aux_data);	//	XXX: destroy에서 해제?
 
 		return true;
 	}
