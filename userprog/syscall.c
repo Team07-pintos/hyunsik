@@ -81,12 +81,14 @@ void check_address(void *addr){
 		exit(-1);
 	}
 
+	#ifdef VM
 	// lazy_load 구현 이후, addr에 대응되는 frame이 할당 되지 않아도 통과 시켜 줘야함
 	if(pml4_get_page(thread_current()->pml4, addr) == NULL){
 		if(spt_find_page(&(thread_current()->spt.sup_hash), addr) == NULL){
 			exit(-1);
 		}
 	}
+	#endif
 }
 /* ----------------------------------- project2-2_User Memory Access ----------------------------------- */
 

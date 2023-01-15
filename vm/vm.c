@@ -293,26 +293,37 @@ supplemental_page_table_copy (struct supplemental_page_table *dst UNUSED, struct
 				}
 				break;
 		}
-		// if(hash_insert(&dst->sup_hash, hash_cur (&i)) == NULL){
-		// 	return false;
-		}
+	}
 	return true;
 	}
 
 /* Free the resource hold by the supplemental page table */
 /* page 순회하면서 destroy 호출 */
-void
-supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
+void supplemental_page_table_kill (struct supplemental_page_table *spt UNUSED) {
 	/* TODO: Destroy all the supplemental_page_table hold by thread and
 	 * TODO: writeback all the modified contents to the storage. */
-	/* error */
-	struct hash_iterator i;
-	hash_first (&i, &spt->sup_hash);
-	while (hash_next (&i)) {
-		struct page *tmp = hash_entry (hash_cur (&i), struct page, hash_e);
-		spt_remove_page(spt, tmp);	// page 구조체 할당해제 및 destroy 함수 호출	
-	}
-	free(spt->sup_hash.buckets);	// hash_init에서 할당
+
+	/*
+		hash_clean 을 쓸 때에는 hash 의 buckets 할당이 해제되지 않아 메모리 누수상태로 진행.
+		destroy를 쓸 경우 메모리 누수는 막지만,
+		initd에서 spt_init()을 한 뒤, process_init()을 하고, 그 안에서 process_cleanup()을 하는데,
+		거기서 spt_kill을 진행하고 다시 process_init을 진행하기에,
+		다시 spt_init()을 실행해야 spt를 정상적으로 활용할 수 있다.
+	*/ 
+	hash_destroy(&spt->sup_hash, destroy_fun);
+
+	/*error	
+		hash_clear를 안쓰고 순회하며 page만 지워나가면 hash테이블 속에 채워진 bucket정보가 남아 다시 추가할 때 오류 생성.
+		hash_clear 속의 list_init으로 각 bucket 초기화가 이루어져야 혼선이 생기지 않는다.
+
+		struct hash_iterator i;
+		hash_first (&i, &spt->sup_hash);
+		while (hash_next (&i)) {
+			struct page *tmp = hash_entry (hash_cur (&i), struct page, hash_e);
+			spt_remove_page(spt, tmp);	// page 구조체 할당해제 및 destroy 함수 호출	
+		}
+		free(spt->sup_hash.buckets);	// hash_init에서 할당
+	*/
 }
 
 /* 3-1 implementation */
@@ -329,4 +340,22 @@ bool page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *au
   const struct page *b = hash_entry (b_, struct page, hash_e);
 
   return a->va < b->va;
+}
+
+void
+destroy_fun (struct hash_elem *e, void *aux UNUSED){
+	// 삭제할 페이지 받아오기
+	struct page *page = hash_entry (e, struct page, hash_e);
+
+	// 에러체크 - 가져온 페이지가 NULL일 경우
+	ASSERT (page != NULL);
+
+	// destroy & free
+	vm_dealloc_page(page);
+
+	// destroy()를 사용하여 해당 페이지를 제거
+	// destroy (page);
+
+	// 사용한 페이지 메모리 반환
+	// free (page);
 }

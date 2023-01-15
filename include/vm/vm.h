@@ -124,6 +124,8 @@ enum vm_type page_get_type (struct page *page);
 uint64_t page_hash (const struct hash_elem *p_, void *aux UNUSED);
 bool page_less (const struct hash_elem *a_, const struct hash_elem *b_, void *aux UNUSED);
 
+void destroy_fun (struct hash_elem *e, void *aux UNUSED);
+
 struct lazy_load_aux{
 	struct file *file;
 	off_t ofs;

@@ -1,4 +1,4 @@
-// #define VM
+#define VM
 
 #include "userprog/process.h"
 #include <debug.h>
@@ -323,6 +323,9 @@ process_exec (void *f_name) {
 	// 현재 프로세스에 담긴 context를 지워줌
 	// 지워준다는 것은 프로세스에 할당된 page directory를 지운다는 것
 	process_cleanup ();
+
+	// cleanup의 spt_kill로인한 재실행
+	supplemental_page_table_init(&thread_current()->spt);
 
 	/* ----------------------------------- project2-1_Argument Passing ----------------------------------- */
 	/* And then load the binary */
