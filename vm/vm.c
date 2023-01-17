@@ -164,6 +164,13 @@ vm_get_frame (void) {
 /* Growing the stack. */
 static void
 vm_stack_growth (void *addr UNUSED) {
+    // 스택 타입으로 메모리 할당
+    if (vm_alloc_page(VM_STACK, addr, 1)) {
+        // 할당받은 페이지와 프래임 매핑후 mmu 설정
+        vm_claim_page(addr);
+		// 스레드에 저장되어있던 마지막 스택 주소 수정
+        thread_current()->stack_bottom -= PGSIZE;
+    }
 }
 
 /* Handle the fault on write_protected page */
@@ -183,6 +190,16 @@ vm_try_handle_fault (struct intr_frame *f UNUSED, void *addr UNUSED, bool user U
 	if(is_kernel_vaddr(addr)){
 		return false;
 	}
+
+	// 스택의 증가로 page fault를 해결할 수 있는지 확인
+	// 8바이트씩 내려감 & 스택 최대 1MB
+	if (f->rsp - 8 <= addr && addr <= USER_STACK && USER_STACK - 0x100000 <= addr) {
+		// 스택 증가 함수 호출
+		// 주소를 현재 스택의 마지막 주소에서 새롭게 할당받을 크기인 PGSIZE로 넘겨줌
+		vm_stack_growth(thread_current()->stack_bottom - PGSIZE);
+		return true;
+	}
+
 	// 현재 페이지가 없는 경우
 	if (not_present) {
 		// 보조 페이지 테이블에서 주소에 맞는 페이지 가져오기

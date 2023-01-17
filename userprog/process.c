@@ -1,4 +1,4 @@
-#define VM
+// #define VM
 
 #include "userprog/process.h"
 #include <debug.h>
@@ -980,6 +980,10 @@ setup_stack (struct intr_frame *if_) {
 	if (vm_alloc_page_with_initializer(VM_STACK , stack_bottom, true, NULL, NULL)){
 		if(vm_claim_page(stack_bottom)){
 			if_->rsp = USER_STACK;
+
+			// 스택의 끝부분 저장
+			thread_current()->stack_bottom = stack_bottom;
+
 			success = true;
 		}
 	}

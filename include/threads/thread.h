@@ -158,6 +158,10 @@ struct thread {
 	struct semaphore fork_sys_sema;
 	struct semaphore wait_sys_sema;
 	struct semaphore exit_sys_sema;
+
+	// 스택의 마지막 부분을 저장해둘 변수
+    void *stack_bottom;
+	
 	/* -------------- project2-3-2_System calls-Process ------------- */
 	
 		/* Owned by thread.c. */
